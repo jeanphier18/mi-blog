@@ -1,5 +1,7 @@
 # Mi Blog
 
+**Sitio publicado:** https://mi-blog-flax.vercel.app
+
 Blog personal construido paso a paso con Next.js 16, TypeScript, Tailwind CSS, Prisma y PostgreSQL (Neon).
 
 Incluye lista de artículos, página de detalle, publicación de artículos y autenticación con sesiones en base de datos.
