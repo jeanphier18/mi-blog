@@ -1,13 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { getPostById, getPosts } from "@/lib/posts";
+import { getPostById } from "@/lib/posts";
 import { formatDate } from "@/lib/format";
-
-export async function generateStaticParams() {
-  const posts = await getPosts();
-  return posts.map((post) => ({ id: String(post.id) }));
-}
 
 export async function generateMetadata(props: PageProps<"/posts/[id]">) {
   const { id } = await props.params;

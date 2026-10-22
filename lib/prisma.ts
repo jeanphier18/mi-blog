@@ -1,12 +1,23 @@
-import path from "node:path";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { attachDatabasePool } from "@vercel/functions";
+import { Pool } from "pg";
 import { PrismaClient } from "@/generated/prisma/client";
 
-const databaseUrl =
-  process.env.DATABASE_URL ??
-  `file:${path.join(process.cwd(), "prisma", "dev.db")}`;
+const connectionString = process.env.DATABASE_URL;
 
-const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
+if (!connectionString) {
+  throw new Error(
+    "Falta DATABASE_URL. Ejecuta `neon env pull` para generarla en .env.",
+  );
+}
+
+const pool = new Pool({ connectionString });
+
+if (process.env.VERCEL) {
+  attachDatabasePool(pool);
+}
+
+const adapter = new PrismaPg(pool);
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;

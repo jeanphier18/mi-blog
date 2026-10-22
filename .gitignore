@@ -50,3 +50,4 @@ prisma/*.db-shm
 next-env.d.ts
 
 /generated/prisma
+.neon

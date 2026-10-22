@@ -1,25 +1,40 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client";
 
 const demoPasswordHash = bcrypt.hashSync("password123", 10);
 
-const adapter = new PrismaBetterSqlite3({
-  url: process.env.DATABASE_URL ?? "file:./prisma/dev.db",
-});
+const connectionString =
+  process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
 
+if (!connectionString) {
+  throw new Error(
+    "Falta DATABASE_URL_UNPOOLED o DATABASE_URL. Ejecuta `neon env pull` y vuelve a intentarlo.",
+  );
+}
+
+const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
-const posts = [
+type DemoAuthor = "jean" | "ana";
+
+const posts: {
+  title: string;
+  excerpt: string;
+  tag: string;
+  readingTime: number;
+  author: DemoAuthor;
+  publishedAt: Date;
+  content: string;
+}[] = [
   {
-    id: 1,
     title: "Cómo empecé a aprender desarrollo web",
     excerpt:
       "El primer paso no es elegir el framework perfecto, sino perder el miedo a romper cosas. Así fue mi punto de partida.",
     tag: "Aprendizaje",
     readingTime: 6,
-    authorId: 1,
+    author: "jean",
     publishedAt: new Date("2026-10-01T10:00:00.000Z"),
     content: [
       "Durante mucho tiempo pensé que aprender a programar era memorizar una lista infinita de conceptos. La realidad es bastante más sencilla: se trata de construir cosas pequeñas, equivocarse rápido y entender el error antes de pasar al siguiente paso.",
@@ -29,13 +44,12 @@ const posts = [
     ].join("\n\n"),
   },
   {
-    id: 2,
     title: "Next.js 16: lo que necesitas saber antes de empezar",
     excerpt:
       "El App Router, los Server Components y los cambios recientes de Next.js explicados sin jerga innecesaria.",
     tag: "Next.js",
     readingTime: 8,
-    authorId: 2,
+    author: "ana",
     publishedAt: new Date("2026-10-10T10:00:00.000Z"),
     content: [
       "Next.js combina frontend y backend en un mismo proyecto, lo que lo convierte en una opción muy cómoda para aprender desarrollo web completo. La clave está en el App Router: cada carpeta dentro de app representa una ruta y cada archivo page.tsx define lo que se muestra en ella.",
@@ -45,13 +59,12 @@ const posts = [
     ].join("\n\n"),
   },
   {
-    id: 3,
     title: "Tailwind CSS sin miedo: mi flujo de trabajo",
     excerpt:
       "Cómo dejé de pelear con las clases utilitarias y empecé a diseñar interfaces más rápido.",
     tag: "CSS",
     readingTime: 5,
-    authorId: 1,
+    author: "jean",
     publishedAt: new Date("2026-10-15T10:00:00.000Z"),
     content: [
       "Al principio Tailwind me parecía un archivo HTML lleno de ruido. ¿Por qué escribir veinte clases en lugar de tres líneas de CSS? La respuesta apareció cuando empecé a iterar sobre diseños reales: cambiar un color o un espaciado es editar una clase, no inventar un nuevo nombre.",
@@ -61,13 +74,12 @@ const posts = [
     ].join("\n\n"),
   },
   {
-    id: 4,
     title: "El arte de escribir un buen README",
     excerpt:
       "Tu proyecto no termina cuando funciona. Termina cuando otra persona puede entenderlo y ejecutarlo sin ayuda.",
     tag: "Buenas prácticas",
     readingTime: 4,
-    authorId: 2,
+    author: "ana",
     publishedAt: new Date("2026-10-20T10:00:00.000Z"),
     content: [
       "Un README es la primera impresión de tu proyecto. Antes de leer el código, cualquier persona pasa por ese archivo. Si no explica qué hace el proyecto ni cómo ejecutarlo, la mayoría cerrará la pestaña.",
@@ -78,58 +90,78 @@ const posts = [
   },
 ];
 
+const comments: {
+  body: string;
+  postIndex: number;
+  author: DemoAuthor;
+  createdAt: Date;
+}[] = [
+  {
+    body: "Me identifico con lo de romper cosas: así es como realmente se aprende.",
+    postIndex: 0,
+    author: "ana",
+    createdAt: new Date("2026-10-02T09:00:00.000Z"),
+  },
+  {
+    body: "Muy útil el detalle de params asíncronos. Justo me estaba pasando.",
+    postIndex: 1,
+    author: "ana",
+    createdAt: new Date("2026-10-11T15:30:00.000Z"),
+  },
+  {
+    body: "Gracias, Ana. En la siguiente fase lo vamos a usar con la base de datos.",
+    postIndex: 1,
+    author: "jean",
+    createdAt: new Date("2026-10-11T18:00:00.000Z"),
+  },
+];
+
 async function main() {
   await prisma.session.deleteMany();
   await prisma.comment.deleteMany();
   await prisma.post.deleteMany();
   await prisma.user.deleteMany();
 
-  await prisma.user.createMany({
-    data: [
-      {
-        id: 1,
+  const authors = {
+    jean: await prisma.user.create({
+      data: {
         name: "Jean",
         email: "jean@example.com",
         passwordHash: demoPasswordHash,
       },
-      {
-        id: 2,
+    }),
+    ana: await prisma.user.create({
+      data: {
         name: "Ana",
         email: "ana@example.com",
         passwordHash: demoPasswordHash,
       },
-    ],
-  });
+    }),
+  };
+
+  const createdPosts = [];
 
   for (const post of posts) {
-    await prisma.post.create({ data: post });
+    const { author, ...data } = post;
+
+    createdPosts.push(
+      await prisma.post.create({
+        data: { ...data, authorId: authors[author].id },
+      }),
+    );
   }
 
-  await prisma.comment.createMany({
-    data: [
-      {
-        id: 1,
-        body: "Me identifico con lo de romper cosas: así es como realmente se aprende.",
-        postId: 1,
-        authorId: 2,
-        createdAt: new Date("2026-10-02T09:00:00.000Z"),
+  for (const comment of comments) {
+    const { postIndex, author, ...data } = comment;
+
+    await prisma.comment.create({
+      data: {
+        ...data,
+        postId: createdPosts[postIndex].id,
+        authorId: authors[author].id,
       },
-      {
-        id: 2,
-        body: "Muy útil el detalle de params asíncronos. Justo me estaba pasando.",
-        postId: 2,
-        authorId: 2,
-        createdAt: new Date("2026-10-11T15:30:00.000Z"),
-      },
-      {
-        id: 3,
-        body: "Gracias, Ana. En la siguiente fase lo vamos a usar con la base de datos.",
-        postId: 2,
-        authorId: 1,
-        createdAt: new Date("2026-10-11T18:00:00.000Z"),
-      },
-    ],
-  });
+    });
+  }
 
   console.log(
     "Seed listo: 2 usuarios, 4 posts y 3 comentarios. Contraseña de demo: password123",
